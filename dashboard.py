@@ -3,9 +3,9 @@ from dash import dcc, html, Input, Output
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
-import geopandas as gpd
-import folium
-from folium import plugins
+# import geopandas as gpd
+# import folium
+# from folium import plugins
 import json
 import dash_bootstrap_components as dbc
 from datetime import datetime
@@ -29,13 +29,13 @@ except Exception as e:
 try:
     with open('Nova Scotia Health Authority Management Zones.geojson', 'r') as f:
         geojson_data = json.load(f)
-    gdf = gpd.read_file('Nova Scotia Health Authority Management Zones.geojson')
+    # gdf = gpd.read_file('Nova Scotia Health Authority Management Zones.geojson')
     print("GeoJSON loaded successfully")
     print(f"GeoJSON features: {len(geojson_data['features'])}")
 except Exception as e:
     print(f"Error loading GeoJSON: {e}")
     geojson_data = None
-    gdf = gpd.GeoDataFrame()
+    # gdf = gpd.GeoDataFrame()
 
 # Data preprocessing
 if not df.empty:
@@ -220,9 +220,7 @@ app.layout = dbc.Container([
             dbc.Card([
                 dbc.CardHeader("Geographic Distribution - Choropleth Map"),
                 dbc.CardBody([
-                    html.Div(id='map-container', children=[
-                        html.Iframe(id='map', width='100%', height='500'),
-                    ])
+                    dcc.Graph(id='map', style={'height': '700px'})
                 ])
             ])
         ])
@@ -509,13 +507,13 @@ def update_sex_death(year_range, selected_zone, selected_drug):
 
 # Callback for map
 @app.callback(
-    Output('map', 'srcDoc'),
+    Output('map', 'figure'),
     [Input('year-slider', 'value'),
      Input('drug-dropdown', 'value')]
 )
 def update_map(year_range, selected_drug):
-    if df.empty or geojson_data is None:
-        return ""
+    if df.empty:
+        return go.Figure()
     
     # Filter data for map
     zones = ['Central', 'Eastern', 'Northern', 'Western']
@@ -530,7 +528,7 @@ def update_map(year_range, selected_drug):
     ]
     
     if filtered_df.empty:
-        return ""
+        return go.Figure()
     
     # Aggregate data by zone
     zone_data = filtered_df.groupby('Health Zone of Residence').agg({
@@ -538,69 +536,68 @@ def update_map(year_range, selected_drug):
         'Rate': 'mean'
     }).reset_index()
     
-    # Create folium map centered on Nova Scotia
-    m = folium.Map(location=[45.0, -63.0], zoom_start=7, tiles='OpenStreetMap')
-    
-    # Create choropleth
-    folium.Choropleth(
-        geo_data=geojson_data,
-        name='choropleth',
-        data=zone_data,
-        columns=['Health Zone of Residence', 'Rate'],
-        key_on='feature.properties.name',
-        fill_color='YlOrRd',
-        fill_opacity=0.7,
-        line_opacity=0.2,
-        legend_name=f'{selected_drug} Rate per 100k ({year_range[0]}-{year_range[1]})'
-    ).add_to(m)
-    
-    # Add markers with additional information
-    for _, row in zone_data.iterrows():
-        zone_name = row['Health Zone of Residence']
-        deaths = row['Frequency']
-        rate = row['Rate']
+    # Create Plotly choropleth map using the GeoJSON data
+    if geojson_data is not None:
+        # Create a mapping from zone names to match GeoJSON properties
+        zone_name_mapping = {
+            'Central': 'Central',
+            'Eastern': 'Eastern', 
+            'Northern': 'Northern',
+            'Western': 'Western'
+        }
         
-        # Calculate centroid from GeoJSON data
-        zone_centroid = None
-        if not gdf.empty:
-            zone_geom = gdf[gdf['name'] == zone_name]
-            if not zone_geom.empty:
-                # Project to UTM for accurate centroid calculation, then back to WGS84
-                try:
-                    geom_utm = zone_geom.to_crs(epsg=32620)  # UTM Zone 20N for Nova Scotia
-                    centroid_utm = geom_utm.geometry.centroid.iloc[0]
-                    centroid_wgs84 = gpd.GeoSeries([centroid_utm], crs=32620).to_crs(epsg=4326).iloc[0]
-                    zone_centroid = [centroid_wgs84.y, centroid_wgs84.x]  # [lat, lon]
-                except:
-                    # Fallback to simple centroid if projection fails
-                    centroid = zone_geom.geometry.centroid.iloc[0]
-                    zone_centroid = [centroid.y, centroid.x]  # [lat, lon]
+        # Prepare data for choropleth
+        locations = []
+        z_values = []
+        hover_text = []
         
-        # Fallback to improved approximate coordinates if centroid calculation fails
-        if zone_centroid is None:
-            zone_coords = {
-                'Central': [44.65, -63.60],  # Halifax area
-                'Eastern': [45.70, -61.40],  # Sydney/Cape Breton area
-                'Northern': [46.10, -60.80],  # Northern Cape Breton/Ingonish area
-                'Western': [44.25, -65.80]   # Yarmouth/Digby area
-            }
-            zone_centroid = zone_coords.get(zone_name)
+        for _, row in zone_data.iterrows():
+            zone_name = row['Health Zone of Residence']
+            if zone_name in zone_name_mapping:
+                locations.append(zone_name_mapping[zone_name])
+                z_values.append(row['Rate'])
+                hover_text.append(f"<b>{zone_name}</b><br>Total Deaths: {row['Frequency']}<br>Rate per 100k: {row['Rate']:.1f}")
         
-        if zone_centroid:
-            folium.Marker(
-                location=zone_centroid,
-                popup=f"""
-                <b>{zone_name} Zone</b><br>
-                Total Deaths: {deaths}<br>
-                Average Rate: {rate:.1f} per 100k<br>
-                Period: {year_range[0]}-{year_range[1]}
-                """,
-                icon=folium.Icon(color='red', icon='info-sign')
-            ).add_to(m)
-    
-    folium.LayerControl().add_to(m)
-    
-    return m._repr_html_()
+        # Create choropleth figure
+        fig = go.Figure(go.Choroplethmapbox(
+            geojson=geojson_data,
+            locations=locations,
+            z=z_values,
+            colorscale='YlOrRd',
+            hovertemplate='%{hovertext}<extra></extra>',
+            hovertext=hover_text,
+            marker_opacity=0.7,
+            marker_line_width=1,
+            featureidkey="properties.name"
+        ))
+        
+        fig.update_layout(
+            mapbox_style="open-street-map",
+            mapbox=dict(
+                center=go.layout.mapbox.Center(lat=45.0, lon=-63.0),
+                zoom=6
+            ),
+            margin={"r":0,"t":0,"l":0,"b":0},
+            title=f'{selected_drug} Rate per 100k Population ({year_range[0]}-{year_range[1]})',
+            title_x=0.5
+        )
+        
+        return fig
+    else:
+        # Fallback to bar chart if no geojson
+        fig = px.bar(
+            zone_data,
+            x='Health Zone of Residence',
+            y='Rate',
+            title=f"{selected_drug} Rate by Health Zone ({year_range[0]}-{year_range[1]})",
+            color='Rate',
+            color_continuous_scale='YlOrRd'
+        )
+        fig.update_layout(
+            xaxis_title="Health Zone",
+            yaxis_title="Rate per 100k Population"
+        )
+        return fig
 
 if __name__ == '__main__':
     print("Starting Nova Scotia Substance-Related Fatalities Dashboard...")
