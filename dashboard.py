@@ -57,7 +57,15 @@ if not df.empty:
     # Get unique values for filters
     health_zones = sorted([zone for zone in df['Health Zone of Residence'].unique() 
                           if zone in ['Central', 'Eastern', 'Northern', 'Western', 'Nova Scotia']])
-    drug_types = sorted(df['Drug Type'].unique())
+    
+    # Get drug types and exclude aggregated categories
+    excluded_drug_categories = [
+        'Opioid - total',
+        'Total - all substances', 
+        'Nonpharmaceutical drug (any)'
+    ]
+    all_drug_types = df['Drug Type'].unique()
+    drug_types = sorted([drug for drug in all_drug_types if drug not in excluded_drug_categories])
     years = sorted(df['Year'].unique())
     
     print(f"Health Zones: {health_zones}")
@@ -119,7 +127,7 @@ app.layout = dbc.Container([
                     dcc.Dropdown(
                         id='drug-dropdown',
                         options=[{'label': drug, 'value': drug} for drug in drug_types],
-                        value=drug_types[0] if drug_types else 'Opioid - total',
+                        value='Cocaine' if 'Cocaine' in drug_types else (drug_types[0] if drug_types else 'Cocaine'),
                         clearable=False,
                         className="mb-3"
                     )
@@ -198,9 +206,9 @@ app.layout = dbc.Container([
         ], width=6),
         dbc.Col([
             dbc.Card([
-                dbc.CardHeader("Manner of Death Analysis"),
+                dbc.CardHeader("Sex of Death Analysis"),
                 dbc.CardBody([
-                    dcc.Graph(id='manner-death-chart', style={'height': '400px'})
+                    dcc.Graph(id='sex-death-chart', style={'height': '400px'})
                 ])
             ])
         ], width=6),
@@ -396,8 +404,18 @@ def update_drug_distribution(year_range, selected_zone):
     if filtered_df.empty:
         return html.P("No data available for selected filters")
     
+    # Group by drug type and filter out aggregated categories
     drug_data = filtered_df.groupby('Drug Type')['Frequency'].sum().reset_index()
     drug_data['Rate'] = filtered_df.groupby('Drug Type')['Rate'].mean().values
+    
+    # Remove aggregated/total categories
+    excluded_categories = [
+        'Opioid - total',
+        'Total - all substances', 
+        'Nonpharmaceutical drug (any)'
+    ]
+    drug_data = drug_data[~drug_data['Drug Type'].isin(excluded_categories)]
+    
     drug_data = drug_data.sort_values('Frequency', ascending=False).head(15)
     
     # Calculate percentages
@@ -443,41 +461,42 @@ def update_drug_distribution(year_range, selected_zone):
         )
     ]
 
-# Callback for manner of death chart
+# Callback for sex of death chart
 @app.callback(
-    Output('manner-death-chart', 'figure'),
+    Output('sex-death-chart', 'figure'),
     [Input('year-slider', 'value'),
      Input('zone-dropdown', 'value'),
      Input('drug-dropdown', 'value')]
 )
-def update_manner_death(year_range, selected_zone, selected_drug):
+def update_sex_death(year_range, selected_zone, selected_drug):
     if df.empty:
         return go.Figure()
     
-    # Filter data for manner of death
-    manners = ['Accident', 'Suicide', 'All manners']
+    # Filter data for sex analysis
+    sexes = ['Male', 'Female']
     filtered_df = df[
         (df['Year'] >= year_range[0]) & 
         (df['Year'] <= year_range[1]) &
         (df['Health Zone of Residence'] == selected_zone) &
         (df['Drug Type'] == selected_drug) &
         (df['Quarter'] == 'All') &
-        (df['Manner of Death'].isin(manners)) &
-        (df['Sex'] == 'Total')
+        (df['Manner of Death'] == 'All manners') &
+        (df['Sex'].isin(sexes))
     ]
     
     if filtered_df.empty:
         return go.Figure()
     
-    manner_data = filtered_df.groupby(['Year', 'Manner of Death'])['Frequency'].sum().reset_index()
+    sex_data = filtered_df.groupby(['Year', 'Sex'])['Frequency'].sum().reset_index()
     
     fig = px.line(
-        manner_data,
+        sex_data,
         x='Year',
         y='Frequency',
-        color='Manner of Death',
-        title=f"Deaths by Manner Over Time - {selected_drug} in {selected_zone}",
-        markers=True
+        color='Sex',
+        title=f"Deaths by Sex Over Time - {selected_drug} in {selected_zone}",
+        markers=True,
+        color_discrete_map={'Male': '#1f77b4', 'Female': '#ff7f0e'}
     )
     
     fig.update_layout(
@@ -585,5 +604,5 @@ def update_map(year_range, selected_drug):
 
 if __name__ == '__main__':
     print("Starting Nova Scotia Substance-Related Fatalities Dashboard...")
-    print("Open your web browser and go to: http://127.0.0.1:8056")
-    app.run(debug=True, host='0.0.0.0', port=8056)
+    print("Open your web browser and go to: http://127.0.0.1:8059")
+    app.run(debug=True, host='0.0.0.0', port=8059)
