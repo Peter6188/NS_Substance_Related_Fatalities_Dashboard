@@ -138,6 +138,14 @@ app.layout = dbc.Container([
         # Right content area
         dbc.Col([
     
+    # Key Statistics Title
+    dbc.Row([
+        dbc.Col([
+            html.H3(id="key-stats-title", className="text-center mb-3", 
+                   style={'color': '#2c3e50', 'fontWeight': 'bold'})
+        ], width=12)
+    ], className="mb-3"),
+    
     # Key Statistics Cards
     dbc.Row([
         dbc.Col([
@@ -218,7 +226,7 @@ app.layout = dbc.Container([
     dbc.Row([
         dbc.Col([
             dbc.Card([
-                dbc.CardHeader("Geographic Distribution - Choropleth Map"),
+                dbc.CardHeader(id="map-header", children="Geographic Distribution - Choropleth Map"),
                 dbc.CardBody([
                     dcc.Graph(id='map', style={'height': '700px'})
                 ])
@@ -235,14 +243,18 @@ app.layout = dbc.Container([
     [Output('total-deaths', 'children'),
      Output('avg-rate', 'children'),
      Output('peak-year', 'children'),
-     Output('trend-direction', 'children')],
+     Output('trend-direction', 'children'),
+     Output('key-stats-title', 'children')],
     [Input('year-slider', 'value'),
      Input('zone-dropdown', 'value'),
      Input('drug-dropdown', 'value')]
 )
 def update_key_stats(year_range, selected_zone, selected_drug):
+    # Create dynamic title
+    title = f"{selected_drug} Statistics - {selected_zone} ({year_range[0]}-{year_range[1]})"
+    
     if df.empty:
-        return "No data", "No data", "No data", "No data"
+        return "No data", "No data", "No data", "No data", title
     
     # Filter data
     filtered_df = df[
@@ -256,7 +268,7 @@ def update_key_stats(year_range, selected_zone, selected_drug):
     ]
     
     if filtered_df.empty:
-        return "0", "0.0", "N/A", "N/A"
+        return "0", "0.0", "N/A", "N/A", title
     
     total_deaths = filtered_df['Frequency'].sum()
     avg_rate = filtered_df['Rate'].mean()
@@ -277,7 +289,7 @@ def update_key_stats(year_range, selected_zone, selected_drug):
     else:
         trend = "→ Stable"
     
-    return f"{total_deaths:,.0f}", f"{avg_rate:.1f}", str(int(peak_year)) if peak_year != "N/A" else "N/A", trend
+    return f"{total_deaths:,.0f}", f"{avg_rate:.1f}", str(int(peak_year)) if peak_year != "N/A" else "N/A", trend, title
 
 # Callback for time series chart
 @app.callback(
@@ -504,6 +516,14 @@ def update_sex_death(year_range, selected_zone, selected_drug):
     )
     
     return fig
+
+# Callback for map header
+@app.callback(
+    Output('map-header', 'children'),
+    [Input('drug-dropdown', 'value')]
+)
+def update_map_header(selected_drug):
+    return f"{selected_drug} Fatalities - Geographic Distribution by Health Zone"
 
 # Callback for map
 @app.callback(
