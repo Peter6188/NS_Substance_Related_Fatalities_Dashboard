@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output, dash_table
+from dash import dcc, html, Input, Output
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
@@ -86,46 +86,49 @@ app.layout = dbc.Container([
         ])
     ]),
     
-    # Control Panel
-    dbc.Card([
-        dbc.CardHeader("Control Panel"),
-        dbc.CardBody([
-            dbc.Row([
-                dbc.Col([
-                    html.Label("Year Range:", className="font-weight-bold"),
+    # Main layout with sidebar
+    dbc.Row([
+        # Left sidebar - Control Panel
+        dbc.Col([
+            dbc.Card([
+                dbc.CardHeader("Control Panel", style={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'}),
+                dbc.CardBody([
+                    html.Label("Year Range:", className="font-weight-bold mb-2"),
                     dcc.RangeSlider(
                         id='year-slider',
                         min=min(years) if years else 2009,
                         max=max(years) if years else 2025,
                         value=[min(years) if years else 2009, max(years) if years else 2025],
                         marks={year: str(year) for year in range(min(years) if years else 2009, 
-                                                               max(years) + 1 if years else 2026, 2)},
-                        step=1
-                    )
-                ], width=6),
-                
-                dbc.Col([
-                    html.Label("Health Zone:", className="font-weight-bold"),
+                                                               max(years) + 1 if years else 2026, 3)},
+                        step=1,
+                        vertical=False
+                    ),
+                    html.Hr(),
+                    
+                    html.Label("Health Zone:", className="font-weight-bold mb-2"),
                     dcc.Dropdown(
                         id='zone-dropdown',
                         options=[{'label': zone, 'value': zone} for zone in health_zones],
                         value='Nova Scotia',
-                        clearable=False
-                    )
-                ], width=3),
-                
-                dbc.Col([
-                    html.Label("Drug Type:", className="font-weight-bold"),
+                        clearable=False,
+                        className="mb-3"
+                    ),
+                    
+                    html.Label("Drug Type:", className="font-weight-bold mb-2"),
                     dcc.Dropdown(
                         id='drug-dropdown',
                         options=[{'label': drug, 'value': drug} for drug in drug_types],
                         value=drug_types[0] if drug_types else 'Opioid - total',
-                        clearable=False
+                        clearable=False,
+                        className="mb-3"
                     )
-                ], width=3),
-            ])
-        ])
-    ], className="mb-4"),
+                ], style={'padding': '20px'})
+            ], style={'position': 'sticky', 'top': '20px'})
+        ], width=3, className="mb-4"),
+        
+        # Right content area
+        dbc.Col([
     
     # Key Statistics Cards
     dbc.Row([
@@ -189,7 +192,7 @@ app.layout = dbc.Container([
             dbc.Card([
                 dbc.CardHeader("Drug Type Distribution"),
                 dbc.CardBody([
-                    dcc.Graph(id='drug-distribution-chart', style={'height': '400px'})
+                    html.Div(id='drug-distribution-table', style={'height': '400px', 'overflow-y': 'auto'})
                 ])
             ])
         ], width=6),
@@ -216,35 +219,8 @@ app.layout = dbc.Container([
             ])
         ])
     ], className="mb-4"),
-    
-    # Data Table
-    dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardHeader("Detailed Data View"),
-                dbc.CardBody([
-                    dash_table.DataTable(
-                        id='data-table',
-                        columns=[
-                            {"name": "Year", "id": "Year"},
-                            {"name": "Health Zone", "id": "Health Zone of Residence"},
-                            {"name": "Drug Type", "id": "Drug Type"},
-                            {"name": "Manner of Death", "id": "Manner of Death"},
-                            {"name": "Sex", "id": "Sex"},
-                            {"name": "Deaths", "id": "Frequency"},
-                            {"name": "Rate per 100k", "id": "Rate", "type": "numeric", "format": {"specifier": ".1f"}},
-                        ],
-                        style_cell={'textAlign': 'left', 'padding': '10px'},
-                        style_header={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'},
-                        style_data={'backgroundColor': '#ffffff'},
-                        page_size=10,
-                        sort_action="native",
-                        filter_action="native"
-                    )
-                ])
-            ])
-        ])
-    ], className="mb-4"),
+        ], width=9)  # Close right content column
+    ])  # Close main row
     
 ], fluid=True)
 
@@ -397,15 +373,15 @@ def update_zone_comparison(year_range, selected_drug):
     
     return fig
 
-# Callback for drug distribution chart
+# Callback for drug distribution table
 @app.callback(
-    Output('drug-distribution-chart', 'figure'),
+    Output('drug-distribution-table', 'children'),
     [Input('year-slider', 'value'),
      Input('zone-dropdown', 'value')]
 )
 def update_drug_distribution(year_range, selected_zone):
     if df.empty:
-        return go.Figure()
+        return html.P("No data available")
     
     # Filter data for drug distribution
     filtered_df = df[
@@ -418,22 +394,54 @@ def update_drug_distribution(year_range, selected_zone):
     ]
     
     if filtered_df.empty:
-        return go.Figure()
+        return html.P("No data available for selected filters")
     
     drug_data = filtered_df.groupby('Drug Type')['Frequency'].sum().reset_index()
-    drug_data = drug_data.sort_values('Frequency', ascending=False).head(10)
+    drug_data['Rate'] = filtered_df.groupby('Drug Type')['Rate'].mean().values
+    drug_data = drug_data.sort_values('Frequency', ascending=False).head(15)
     
-    fig = px.pie(
-        drug_data,
-        values='Frequency',
-        names='Drug Type',
-        title=f"Drug Type Distribution - {selected_zone} ({year_range[0]}-{year_range[1]})"
-    )
+    # Calculate percentages
+    total_deaths = drug_data['Frequency'].sum()
+    drug_data['Percentage'] = (drug_data['Frequency'] / total_deaths * 100).round(1)
     
-    fig.update_traces(textposition='inside', textinfo='percent+label')
-    fig.update_layout(template='plotly_white')
+    # Create table
+    table_header = [
+        html.Thead([
+            html.Tr([
+                html.Th("Rank", style={'text-align': 'center', 'width': '10%'}),
+                html.Th("Drug Type", style={'text-align': 'left', 'width': '50%'}),
+                html.Th("Deaths", style={'text-align': 'center', 'width': '15%'}),
+                html.Th("Rate per 100k", style={'text-align': 'center', 'width': '15%'}),
+                html.Th("Percentage", style={'text-align': 'center', 'width': '10%'})
+            ])
+        ], style={'backgroundColor': '#f8f9fa', 'fontWeight': 'bold'})
+    ]
     
-    return fig
+    table_body = [
+        html.Tbody([
+            html.Tr([
+                html.Td(str(i+1), style={'text-align': 'center', 'fontWeight': 'bold'}),
+                html.Td(row['Drug Type'], style={'text-align': 'left'}),
+                html.Td(f"{int(row['Frequency']):,}", style={'text-align': 'center'}),
+                html.Td(f"{row['Rate']:.1f}", style={'text-align': 'center'}),
+                html.Td(f"{row['Percentage']:.1f}%", style={'text-align': 'center'})
+            ], style={'borderBottom': '1px solid #dee2e6'}) 
+            for i, (_, row) in enumerate(drug_data.iterrows())
+        ])
+    ]
+    
+    return [
+        html.H6(f"Drug Type Distribution - {selected_zone} ({year_range[0]}-{year_range[1]})", 
+               className="text-center mb-3"),
+        dbc.Table(
+            table_header + table_body,
+            bordered=True,
+            hover=True,
+            responsive=True,
+            striped=True,
+            style={'fontSize': '0.9rem'}
+        )
+    ]
 
 # Callback for manner of death chart
 @app.callback(
@@ -519,12 +527,12 @@ def update_map(year_range, selected_drug):
         geo_data=geojson_data,
         name='choropleth',
         data=zone_data,
-        columns=['Health Zone of Residence', 'Frequency'],
+        columns=['Health Zone of Residence', 'Rate'],
         key_on='feature.properties.name',
         fill_color='YlOrRd',
         fill_opacity=0.7,
         line_opacity=0.2,
-        legend_name=f'{selected_drug} Deaths ({year_range[0]}-{year_range[1]})'
+        legend_name=f'{selected_drug} Rate per 100k ({year_range[0]}-{year_range[1]})'
     ).add_to(m)
     
     # Add markers with additional information
@@ -538,8 +546,16 @@ def update_map(year_range, selected_drug):
         if not gdf.empty:
             zone_geom = gdf[gdf['name'] == zone_name]
             if not zone_geom.empty:
-                centroid = zone_geom.geometry.centroid.iloc[0]
-                zone_centroid = [centroid.y, centroid.x]  # [lat, lon]
+                # Project to UTM for accurate centroid calculation, then back to WGS84
+                try:
+                    geom_utm = zone_geom.to_crs(epsg=32620)  # UTM Zone 20N for Nova Scotia
+                    centroid_utm = geom_utm.geometry.centroid.iloc[0]
+                    centroid_wgs84 = gpd.GeoSeries([centroid_utm], crs=32620).to_crs(epsg=4326).iloc[0]
+                    zone_centroid = [centroid_wgs84.y, centroid_wgs84.x]  # [lat, lon]
+                except:
+                    # Fallback to simple centroid if projection fails
+                    centroid = zone_geom.geometry.centroid.iloc[0]
+                    zone_centroid = [centroid.y, centroid.x]  # [lat, lon]
         
         # Fallback to improved approximate coordinates if centroid calculation fails
         if zone_centroid is None:
@@ -567,36 +583,7 @@ def update_map(year_range, selected_drug):
     
     return m._repr_html_()
 
-# Callback for data table
-@app.callback(
-    Output('data-table', 'data'),
-    [Input('year-slider', 'value'),
-     Input('zone-dropdown', 'value'),
-     Input('drug-dropdown', 'value')]
-)
-def update_data_table(year_range, selected_zone, selected_drug):
-    if df.empty:
-        return []
-    
-    # Filter data for table
-    filtered_df = df[
-        (df['Year'] >= year_range[0]) & 
-        (df['Year'] <= year_range[1]) &
-        (df['Health Zone of Residence'] == selected_zone) &
-        (df['Drug Type'] == selected_drug)
-    ].copy()
-    
-    if filtered_df.empty:
-        return []
-    
-    # Select relevant columns and sort
-    table_data = filtered_df[['Year', 'Health Zone of Residence', 'Drug Type', 
-                             'Manner of Death', 'Sex', 'Frequency', 'Rate']].copy()
-    table_data = table_data.sort_values(['Year', 'Manner of Death', 'Sex'], ascending=[False, True, True])
-    
-    return table_data.to_dict('records')
-
 if __name__ == '__main__':
     print("Starting Nova Scotia Substance-Related Fatalities Dashboard...")
-    print("Open your web browser and go to: http://127.0.0.1:8052")
-    app.run(debug=True, host='0.0.0.0', port=8052)
+    print("Open your web browser and go to: http://127.0.0.1:8056")
+    app.run(debug=True, host='0.0.0.0', port=8056)
