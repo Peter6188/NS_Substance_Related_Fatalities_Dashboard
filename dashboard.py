@@ -65,7 +65,10 @@ if not df.empty:
         'Nonpharmaceutical drug (any)'
     ]
     all_drug_types = df['Drug Type'].unique()
-    drug_types = sorted([drug for drug in all_drug_types if drug not in excluded_drug_categories])
+    individual_drug_types = sorted([drug for drug in all_drug_types if drug not in excluded_drug_categories])
+    
+    # Add "All" option at the beginning
+    drug_types = ['All'] + individual_drug_types
     years = sorted(df['Year'].unique())
     
     print(f"Health Zones: {health_zones}")
@@ -127,7 +130,7 @@ app.layout = dbc.Container([
                     dcc.Dropdown(
                         id='drug-dropdown',
                         options=[{'label': drug, 'value': drug} for drug in drug_types],
-                        value='Cocaine' if 'Cocaine' in drug_types else (drug_types[0] if drug_types else 'Cocaine'),
+                        value='All',
                         clearable=False,
                         className="mb-3"
                     )
@@ -256,16 +259,34 @@ def update_key_stats(year_range, selected_zone, selected_drug):
     if df.empty:
         return "No data", "No data", "No data", "No data", title
     
-    # Filter data
-    filtered_df = df[
-        (df['Year'] >= year_range[0]) & 
-        (df['Year'] <= year_range[1]) &
-        (df['Health Zone of Residence'] == selected_zone) &
-        (df['Drug Type'] == selected_drug) &
-        (df['Quarter'] == 'All') &
-        (df['Manner of Death'] == 'All manners') &
-        (df['Sex'] == 'Total')
-    ]
+    # Filter data - handle "All" drug type
+    if selected_drug == 'All':
+        # For "All", exclude aggregated categories to avoid double counting
+        excluded_drug_categories = [
+            'Opioid - total',
+            'Total - all substances', 
+            'Nonpharmaceutical drug (any)'
+        ]
+        filtered_df = df[
+            (df['Year'] >= year_range[0]) & 
+            (df['Year'] <= year_range[1]) &
+            (df['Health Zone of Residence'] == selected_zone) &
+            (~df['Drug Type'].isin(excluded_drug_categories)) &
+            (df['Quarter'] == 'All') &
+            (df['Manner of Death'] == 'All manners') &
+            (df['Sex'] == 'Total')
+        ]
+    else:
+        # For specific drug types
+        filtered_df = df[
+            (df['Year'] >= year_range[0]) & 
+            (df['Year'] <= year_range[1]) &
+            (df['Health Zone of Residence'] == selected_zone) &
+            (df['Drug Type'] == selected_drug) &
+            (df['Quarter'] == 'All') &
+            (df['Manner of Death'] == 'All manners') &
+            (df['Sex'] == 'Total')
+        ]
     
     if filtered_df.empty:
         return "0", "0.0", "N/A", "N/A", title
@@ -302,16 +323,34 @@ def update_time_series(year_range, selected_zone, selected_drug):
     if df.empty:
         return go.Figure()
     
-    # Filter data for time series
-    filtered_df = df[
-        (df['Year'] >= year_range[0]) & 
-        (df['Year'] <= year_range[1]) &
-        (df['Health Zone of Residence'] == selected_zone) &
-        (df['Drug Type'] == selected_drug) &
-        (df['Quarter'] == 'All') &
-        (df['Manner of Death'] == 'All manners') &
-        (df['Sex'] == 'Total')
-    ]
+    # Filter data for time series - handle "All" drug type
+    if selected_drug == 'All':
+        # For "All", exclude aggregated categories to avoid double counting
+        excluded_drug_categories = [
+            'Opioid - total',
+            'Total - all substances', 
+            'Nonpharmaceutical drug (any)'
+        ]
+        filtered_df = df[
+            (df['Year'] >= year_range[0]) & 
+            (df['Year'] <= year_range[1]) &
+            (df['Health Zone of Residence'] == selected_zone) &
+            (~df['Drug Type'].isin(excluded_drug_categories)) &
+            (df['Quarter'] == 'All') &
+            (df['Manner of Death'] == 'All manners') &
+            (df['Sex'] == 'Total')
+        ]
+    else:
+        # For specific drug types
+        filtered_df = df[
+            (df['Year'] >= year_range[0]) & 
+            (df['Year'] <= year_range[1]) &
+            (df['Health Zone of Residence'] == selected_zone) &
+            (df['Drug Type'] == selected_drug) &
+            (df['Quarter'] == 'All') &
+            (df['Manner of Death'] == 'All manners') &
+            (df['Sex'] == 'Total')
+        ]
     
     if filtered_df.empty:
         return go.Figure()
@@ -353,17 +392,36 @@ def update_zone_comparison(year_range, selected_drug):
     if df.empty:
         return go.Figure()
     
-    # Filter data for zone comparison
+    # Filter data for zone comparison - handle "All" drug type
     zones = ['Central', 'Eastern', 'Northern', 'Western']
-    filtered_df = df[
-        (df['Year'] >= year_range[0]) & 
-        (df['Year'] <= year_range[1]) &
-        (df['Health Zone of Residence'].isin(zones)) &
-        (df['Drug Type'] == selected_drug) &
-        (df['Quarter'] == 'All') &
-        (df['Manner of Death'] == 'All manners') &
-        (df['Sex'] == 'Total')
-    ]
+    
+    if selected_drug == 'All':
+        # For "All", exclude aggregated categories to avoid double counting
+        excluded_drug_categories = [
+            'Opioid - total',
+            'Total - all substances', 
+            'Nonpharmaceutical drug (any)'
+        ]
+        filtered_df = df[
+            (df['Year'] >= year_range[0]) & 
+            (df['Year'] <= year_range[1]) &
+            (df['Health Zone of Residence'].isin(zones)) &
+            (~df['Drug Type'].isin(excluded_drug_categories)) &
+            (df['Quarter'] == 'All') &
+            (df['Manner of Death'] == 'All manners') &
+            (df['Sex'] == 'Total')
+        ]
+    else:
+        # For specific drug types
+        filtered_df = df[
+            (df['Year'] >= year_range[0]) & 
+            (df['Year'] <= year_range[1]) &
+            (df['Health Zone of Residence'].isin(zones)) &
+            (df['Drug Type'] == selected_drug) &
+            (df['Quarter'] == 'All') &
+            (df['Manner of Death'] == 'All manners') &
+            (df['Sex'] == 'Total')
+        ]
     
     if filtered_df.empty:
         return go.Figure()
@@ -475,24 +533,43 @@ def update_drug_distribution(year_range, selected_zone):
 @app.callback(
     Output('sex-death-chart', 'figure'),
     [Input('year-slider', 'value'),
-     Input('zone-dropdown', 'value'),
      Input('drug-dropdown', 'value')]
 )
-def update_sex_death(year_range, selected_zone, selected_drug):
+def update_sex_death(year_range, selected_drug):
     if df.empty:
         return go.Figure()
     
-    # Filter data for sex analysis
+    # Filter data for sex analysis - handle "All" drug type
+    # Always use Nova Scotia data regardless of selected zone for province-wide sex analysis
     sexes = ['Male', 'Female']
-    filtered_df = df[
-        (df['Year'] >= year_range[0]) & 
-        (df['Year'] <= year_range[1]) &
-        (df['Health Zone of Residence'] == selected_zone) &
-        (df['Drug Type'] == selected_drug) &
-        (df['Quarter'] == 'All') &
-        (df['Manner of Death'] == 'All manners') &
-        (df['Sex'].isin(sexes))
-    ]
+    
+    if selected_drug == 'All':
+        # For "All", exclude aggregated categories to avoid double counting
+        excluded_drug_categories = [
+            'Opioid - total',
+            'Total - all substances', 
+            'Nonpharmaceutical drug (any)'
+        ]
+        filtered_df = df[
+            (df['Year'] >= year_range[0]) & 
+            (df['Year'] <= year_range[1]) &
+            (df['Health Zone of Residence'] == 'Nova Scotia') &
+            (~df['Drug Type'].isin(excluded_drug_categories)) &
+            (df['Quarter'] == 'All') &
+            (df['Manner of Death'] == 'All manners') &
+            (df['Sex'].isin(sexes))
+        ]
+    else:
+        # For specific drug types
+        filtered_df = df[
+            (df['Year'] >= year_range[0]) & 
+            (df['Year'] <= year_range[1]) &
+            (df['Health Zone of Residence'] == 'Nova Scotia') &
+            (df['Drug Type'] == selected_drug) &
+            (df['Quarter'] == 'All') &
+            (df['Manner of Death'] == 'All manners') &
+            (df['Sex'].isin(sexes))
+        ]
     
     if filtered_df.empty:
         return go.Figure()
@@ -504,7 +581,7 @@ def update_sex_death(year_range, selected_zone, selected_drug):
         x='Year',
         y='Frequency',
         color='Sex',
-        title=f"Deaths by Sex Over Time - {selected_drug} in {selected_zone}",
+        title=f"Deaths by Sex Over Time - {selected_drug} in Nova Scotia",
         markers=True,
         color_discrete_map={'Male': '#1f77b4', 'Female': '#ff7f0e'}
     )
@@ -535,17 +612,36 @@ def update_map(year_range, selected_drug):
     if df.empty:
         return go.Figure()
     
-    # Filter data for map
+    # Filter data for map - handle "All" drug type
     zones = ['Central', 'Eastern', 'Northern', 'Western']
-    filtered_df = df[
-        (df['Year'] >= year_range[0]) & 
-        (df['Year'] <= year_range[1]) &
-        (df['Health Zone of Residence'].isin(zones)) &
-        (df['Drug Type'] == selected_drug) &
-        (df['Quarter'] == 'All') &
-        (df['Manner of Death'] == 'All manners') &
-        (df['Sex'] == 'Total')
-    ]
+    
+    if selected_drug == 'All':
+        # For "All", exclude aggregated categories to avoid double counting
+        excluded_drug_categories = [
+            'Opioid - total',
+            'Total - all substances', 
+            'Nonpharmaceutical drug (any)'
+        ]
+        filtered_df = df[
+            (df['Year'] >= year_range[0]) & 
+            (df['Year'] <= year_range[1]) &
+            (df['Health Zone of Residence'].isin(zones)) &
+            (~df['Drug Type'].isin(excluded_drug_categories)) &
+            (df['Quarter'] == 'All') &
+            (df['Manner of Death'] == 'All manners') &
+            (df['Sex'] == 'Total')
+        ]
+    else:
+        # For specific drug types
+        filtered_df = df[
+            (df['Year'] >= year_range[0]) & 
+            (df['Year'] <= year_range[1]) &
+            (df['Health Zone of Residence'].isin(zones)) &
+            (df['Drug Type'] == selected_drug) &
+            (df['Quarter'] == 'All') &
+            (df['Manner of Death'] == 'All manners') &
+            (df['Sex'] == 'Total')
+        ]
     
     if filtered_df.empty:
         return go.Figure()
